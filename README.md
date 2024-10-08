@@ -27,7 +27,15 @@ To learn more about Next.js, take a look at the following resources:
 - [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
 - [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and
+contributions are welcome!
+
+## Setup environment
+
+```bash
+NEXT_PUBLIC_SECRET_KEY_BYTES= # 32 bytes of random data for the secret key
+NEXT_PUBLIC_AMOUNT= # Amount of the token to mint
+```
 
 ## Deploy on Vercel
 
