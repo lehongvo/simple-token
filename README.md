@@ -34,7 +34,6 @@ contributions are welcome!
 
 ```bash
 NEXT_PUBLIC_SECRET_KEY_BYTES= # 32 bytes of random data for the secret key
-NEXT_PUBLIC_AMOUNT= # Amount of the token to mint
 ```
 
 ## Deploy on Vercel
