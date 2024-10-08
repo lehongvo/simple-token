@@ -2,25 +2,18 @@
 
 import { useEffect, useState } from "react";
 import { Commitment, ConfirmOptions, Connection, Keypair, PublicKey, SendTransactionError, Transaction, clusterApiUrl, sendAndConfirmTransaction } from "@solana/web3.js";
-import { AnchorProvider, Program, web3, utils, BN } from "@project-serum/anchor";
+import { AnchorProvider, Program, web3, BN } from "@project-serum/anchor";
 import idl from "./idl.json";
 import { Buffer } from "buffer";
 window.Buffer = Buffer;
 import {
   TOKEN_PROGRAM_ID,
-  createAssociatedTokenAccount,
-  createMint,
   getAssociatedTokenAddress,
-  mintTo,
   getAccount,
-  createAccount,
-  ASSOCIATED_TOKEN_PROGRAM_ID,
   createAssociatedTokenAccountInstruction,
   createMintToInstruction,
   getMint
 } from '@solana/spl-token'
-import dotenv from "dotenv";
-require('dotenv').config();
 
 const programID = new PublicKey(idl.metadata.address);
 const network = clusterApiUrl("devnet");
