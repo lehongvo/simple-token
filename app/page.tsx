@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Commitment, ConfirmOptions, Connection, Keypair, PublicKey, Transaction, clusterApiUrl, sendAndConfirmTransaction } from "@solana/web3.js";
+import { Commitment, ConfirmOptions, Connection, Keypair, PublicKey, SendTransactionError, Transaction, clusterApiUrl, sendAndConfirmTransaction } from "@solana/web3.js";
 import { AnchorProvider, Program, web3, utils, BN } from "@project-serum/anchor";
 import idl from "./idl.json";
 import { Buffer } from "buffer";
@@ -57,7 +57,7 @@ const App = () => {
     return provider;
   };
 
-  const getOrCreateAssociatedTokenAccount = async (mintAddress: string) => {
+  const getOrCreateAssociatedTokenAccount = async (mintAddress: string, publicKey: PublicKey) => {
     const provider = getProvider();
     const mint = new PublicKey(mintAddress);
     const owner = provider.wallet.publicKey;
@@ -102,7 +102,7 @@ const App = () => {
   const getBalanceSLP = async () => {
     try {
       const provider = getProvider();
-      const associatedTokenAddress = await getOrCreateAssociatedTokenAccount(idl.mintAddress);
+      const associatedTokenAddress = await getOrCreateAssociatedTokenAccount(idl.mintAddress, provider.wallet.publicKey);
       await getProgramDetails();
       const tokenAccountInfo = await getAccount(provider.connection, associatedTokenAddress);
       const balance = Number(tokenAccountInfo.amount) / Math.pow(10, 9); // Assuming 9 decimals
@@ -158,7 +158,7 @@ const App = () => {
       }
 
       console.log("Creating mint instruction...");
-      const mintAmount = Number(process.env.NEXT_PUBLIC_AMOUNT!);
+      const mintAmount = Number(1_000_000_000);
       const mintInstruction = createMintToInstruction(
         mintAddress,
         associatedTokenAddress,
@@ -265,6 +265,7 @@ const App = () => {
       console.error("Error fetching program details:", error);
     }
   };
+
   const deposit = async () => {
     if (!walletAddress) {
       alert("Please connect your wallet first.");
@@ -378,15 +379,105 @@ const App = () => {
   };
 
   const withdraw = async () => {
-    // Implement withdraw function here
+    if (!walletAddress) {
+      alert("Please connect your wallet first.");
+      return;
+    }
     setIsWithdrawLoading(true);
     try {
-      // Your withdraw logic here
-      await new Promise(resolve => setTimeout(resolve, 2000)); // Simulating a delay
-      alert("Withdraw function not implemented yet");
+      const provider = getProvider();
+      const program = new Program(idl as any, programID, provider);
+
+      // Find the vault PDA
+      const [vaultPda, _] = await PublicKey.findProgramAddress(
+        [Buffer.from('vault')],
+        program.programId
+      );
+
+      // Get the mint address from program details
+      const mintPubkey = new PublicKey(programDetails.tokenMint);
+
+      // Get or create user's token account
+      const userTokenAccount = await getOrCreateAssociatedTokenAccount(
+        mintPubkey.toString(),
+        provider.wallet.publicKey
+      );
+
+      // Find PDA for user deposit
+      const [userDepositPda] = await PublicKey.findProgramAddress(
+        [
+          Buffer.from('user_deposit'),
+          vaultPda.toBuffer(),
+          provider.wallet.publicKey.toBuffer()
+        ],
+        program.programId
+      );
+
+      // Get the user deposit account info
+      console.log("===========>", userDepositPda.toString());
+      const userDepositAccount = await program.account.userDeposit.fetch(userDepositPda) as { amount: BN };
+      const userDepositBalance = userDepositAccount.amount.toNumber();
+      console.log("User deposit balance:=====>", userDepositBalance);
+
+      // Get the vault's token account
+      const vaultTokenAccount = await getAssociatedTokenAddress(
+        mintPubkey,
+        vaultPda,
+        true // allowOwnerOffCurve set to true for PDA
+      );
+
+      // Get the fee account (assuming it's the same as the owner's associated token account)
+      const feeAccount = await getAssociatedTokenAddress(
+        mintPubkey,
+        new PublicKey(programDetails.owner)
+      );
+
+      const withdrawAmount = new BN(1_000_000_000); // Withdraw 1 token
+
+      // Check if user deposit balance is sufficient
+      console.log("withdrawAmount==========", withdrawAmount.toNumber());
+      if (withdrawAmount.gt(new BN(userDepositBalance))) {
+        alert("Insufficient balance in user deposit account.");
+        return;
+      }
+
+      // Prepare the withdraw transaction
+      const tx = await program.methods
+        .withdraw(withdrawAmount)
+        .accounts({
+          vault: vaultPda,
+          userDeposit: userDepositPda,
+          user: provider.wallet.publicKey,
+          userTokenAccount: userTokenAccount,
+          vaultTokenAccount: vaultTokenAccount,
+          feeAccount: feeAccount,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .transaction();
+
+      // Send the transaction using Phantom wallet
+      const { blockhash } = await provider.connection.getLatestBlockhash();
+      tx.recentBlockhash = blockhash;
+      tx.feePayer = provider.wallet.publicKey;
+
+      const signedTx = await provider.wallet.signTransaction(tx);
+      const txid = await provider.connection.sendRawTransaction(signedTx.serialize());
+      await provider.connection.confirmTransaction(txid);
+
+      // console.log("Withdraw transaction signature:", txid);
+      // setLastTransactionSignature(txid);
+
+      // Refresh balances
+      await getBalanceSLP();
+      await getProgramDetails();
     } catch (error) {
       console.error("Error in withdraw:", error);
-      alert(`Withdraw error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+
+      if (error instanceof SendTransactionError) {
+        alert(`Withdraw failed: ${error.message}`);
+      } else {
+        alert(`Withdraw error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
     } finally {
       setIsWithdrawLoading(false);
     }
@@ -470,7 +561,7 @@ const App = () => {
                   href={explorerUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-blue-500 hover:text-blue-700"
+                  className="text-red-500 hover:text-blue-700 font-bold underline"
                 >
                   View Last Transaction
                 </a>
